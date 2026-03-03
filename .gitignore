@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Environment
+.env
+*.env
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data — large files not tracked in git
+data/Synthetic_processed/
+data/Synthetic_Raw/
+data/Synthetic_videos/
+data/Real_Raw/
+data/Real_Processed/
+data/mapanything/
+
+# Model weights and caches
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+models/
+
+# Generated outputs
+outputs/
+output/
+*.mp4
+*.avi
+
+# Logs
+*.log
+wandb/
