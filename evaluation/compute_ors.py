@@ -126,7 +126,7 @@ def gt_frame_count_real(clip_id):
 def load_sam3_metadata():
     syn_meta, real_meta = {}, {}
 
-    syn_csv = os.path.join(SAM3_DATA, "synthetic", "metadata.csv")
+    syn_csv = os.path.join(SAM3_DATA, "synthetic_metadata.csv")
     if os.path.exists(syn_csv):
         for row in csv.DictReader(open(syn_csv)):
             scene = row["scene"]
@@ -139,7 +139,7 @@ def load_sam3_metadata():
                 "mask":    mask_path,
             }
 
-    real_csv = os.path.join(SAM3_DATA, "real", "metadata.csv")
+    real_csv = os.path.join(SAM3_DATA, "real_metadata.csv")
     if os.path.exists(real_csv):
         for row in csv.DictReader(open(real_csv)):
             clip_id = str(row["video_id"]).zfill(3)

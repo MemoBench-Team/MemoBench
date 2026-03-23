@@ -30,47 +30,23 @@ The benchmark includes **360 clips** (196 synthetic + 164 real-world) spanning d
 
 ### Environment Setup
 
-MemoBench uses **two conda environments**:
-
-| Environment | Python | Purpose | Used by |
-|-------------|--------|---------|---------|
-| `memobench-eval` | 3.11 | Automated metrics + MapAnything + VQA + Leaderboard | `run_eval.py`, `llm-vqa.py`, `leaderboard.py` |
-| `memobench-sam3` | 3.12 | Object Revisit Score (SAM-3 segmentation) | `compute_ors.py` |
-
-Two environments are needed because SAM-3 requires a different PyTorch and NumPy version than the automated metrics pipeline (including MapAnything).
-
-#### Environment 1: `memobench-eval`
-
 ```bash
-conda create -n memobench-eval python=3.11 -y
-conda activate memobench-eval
+conda create -n memobench python=3.11 -y
+conda activate memobench
 
 # PyTorch (adjust cu128 to match your CUDA driver version)
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
 
 # Dependencies
-pip install -r evaluation/requirements_eval.txt
+pip install -r evaluation/requirements.txt
 
 # MapAnything (required for Camera Controllability — estimates camera poses from generated videos)
 git clone https://github.com/facebookresearch/map-anything.git third_party/map-anything
 cd third_party/map-anything
 pip install -e .
 cd ../..
-```
 
-#### Environment 2: `memobench-sam3`
-
-```bash
-conda create -n memobench-sam3 python=3.12 -y
-conda activate memobench-sam3
-
-# PyTorch
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
-
-# Dependencies
-pip install -r evaluation/requirements_sam3.txt
-
-# SAM-3: clone and install as editable package
+# SAM-3 (required for Object Revisit Score)
 git clone https://github.com/facebookresearch/sam3.git third_party/sam3
 cd third_party/sam3
 pip install -e .
@@ -80,13 +56,8 @@ cd ../..
 ### Verify Installation
 
 ```bash
-# Test memobench-eval
-conda activate memobench-eval
-python -c "import torch; import open_clip; import lpips; print('memobench-eval OK')"
-
-# Test memobench-sam3
-conda activate memobench-sam3
-python -c "import torch; from sam3.model_builder import build_sam3_image_model; print('memobench-sam3 OK')"
+conda activate memobench
+python -c "import torch; import open_clip; import lpips; print('OK')"
 ```
 
 ---
@@ -199,7 +170,7 @@ All commands below assume you are in the `MemoBench/` root directory.
 Computes 13 metrics per clip: VisualQuality, MotionSmoothness, ObjIdentityConsistency, Geo3DConsistency, CameraControllability, ImageRewardScore, and per-phase pixel fidelity (PSNR, SSIM, LPIPS for V/D/R phases).
 
 ```bash
-conda activate memobench-eval
+conda activate memobench
 ```
 
 **Evaluate synthetic clips:**
@@ -239,7 +210,7 @@ For all command-line options, output format, and implementation details, see [St
 ORS measures whether the model regenerates the target object when the camera returns in the R-phase. It uses SAM-3 text-prompted segmentation with the object description from `data/sam3_metadata/`.
 
 ```bash
-conda activate memobench-sam3
+conda activate memobench
 ```
 
 **Before running**, register your model in `compute_ors.py` by adding an entry to the `MODEL_CONFIGS` dict:
@@ -289,7 +260,7 @@ SAM3_DIR=/path/to/sam3 python evaluation/compute_ors.py --model-name MyModel
 The VQA pipeline uses a Vision-Language Model (VLM) to answer pre-generated Yes/No questions about each generated video. It evaluates four dimensions: Instruction Following, Object & Background, Continuity of Memory, and Physics Adherence.
 
 ```bash
-conda activate memobench-eval
+conda activate memobench
 ```
 
 **Prerequisites:**
@@ -347,7 +318,7 @@ For all command-line options, output format, and implementation details, see [St
 After completing all three evaluation steps, aggregate results into a unified leaderboard:
 
 ```bash
-conda activate memobench-eval
+conda activate memobench
 
 python leaderboard/leaderboard.py \
     --eval-dir  outputs/ \
