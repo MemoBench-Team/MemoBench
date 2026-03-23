@@ -17,7 +17,6 @@ The benchmark includes **360 clips** (196 synthetic + 164 real-world) spanning d
 - [Leaderboard](#leaderboard)
 - [Metrics Reference](docs/metrics-reference.md)
 - [License](#license)
-- [Citation](#citation)
 
 ---
 
@@ -386,15 +385,3 @@ For detailed descriptions of all 14 metrics (backbones, phases, score ranges), s
 
 This project is licensed under the MIT License. See [LICENSE.md](LICENSE.md) for details.
 
----
-
-## Citation
-
-```bibtex
-@inproceedings{memobench2026,
-  title     = {MemoBench: Benchmarking Visual Memory in World Generation Models},
-  author    = {},
-  booktitle = {European Conference on Computer Vision (ECCV)},
-  year      = {2026}
-}
-```
