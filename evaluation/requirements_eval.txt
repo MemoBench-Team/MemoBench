@@ -1,0 +1,20 @@
+# MemoBench evaluation environment (memobench-eval)
+# Install after: pip install torch torchvision torchaudio
+
+# Core
+numpy>=1.24,<3.0
+opencv-python>=4.8
+pandas>=2.0
+tqdm>=4.60
+scipy>=1.10
+Pillow>=10.0
+openpyxl>=3.1          # for reading .xlsx keyframe files
+
+# Metrics
+open-clip-torch>=2.24  # CLIP ViT-B-32 for scene consistency, aesthetic score
+lpips>=0.1.4           # perceptual distance (LPIPS)
+image-reward>=1.5      # human-preference scoring
+pyiqa>=0.1.10          # CLIP-IQA+ image quality
+
+# Leaderboard (optional, only needed for leaderboard/leaderboard.py)
+# pandas is already listed above

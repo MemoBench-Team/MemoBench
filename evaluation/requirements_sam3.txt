@@ -1,0 +1,19 @@
+# MemoBench SAM-3 environment (memobench-sam3)
+# Install after: pip install torch torchvision torchaudio
+
+# Core
+numpy>=1.24,<2.0
+opencv-python>=4.8
+pandas>=2.0
+tqdm>=4.60
+Pillow>=10.0
+openpyxl>=3.1
+
+# SAM-3 dependencies
+pycocotools>=2.0
+iopath>=0.1.10
+decord>=0.6.0
+
+# NOTE: SAM-3 itself must be installed separately:
+#   git clone <sam3-repo> third_party/sam3
+#   cd third_party/sam3 && pip install -e .

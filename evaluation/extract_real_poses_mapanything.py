@@ -1,18 +1,3 @@
-#!/usr/bin/env python
-"""
-extract_real_poses_mapanything.py — Extract camera poses from real GT videos
-using MapAnything, replacing MegaSAM-derived poses.
-
-Outputs .npz files compatible with the existing evaluation pipeline:
-  - cam_c2w: (N, 4, 4) float64 camera-to-world poses
-  - intrinsic: (3, 3) float64 intrinsic matrix (copied from JSON)
-
-Usage:
-  python extract_real_poses_mapanything.py
-  python extract_real_poses_mapanything.py --clip-ids 001 002 003
-  python extract_real_poses_mapanything.py --skip-existing
-"""
-
 import os
 import sys
 import json

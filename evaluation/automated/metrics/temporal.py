@@ -1,31 +1,9 @@
-"""
-Motion smoothness via RAFT optical flow (Teed & Deng, ECCV 2020).
-
-RAFT (Recurrent All-Pairs Field Transforms) constructs a 4D all-pairs
-correlation volume and iteratively updates the flow field. We warp
-frame_i toward frame_{i+1} using the predicted flow and measure the
-mean L1 photometric error as a proxy for temporal smoothness.
-
-Low warp error  → smooth, physically plausible camera motion.
-High warp error → jitter, temporal discontinuities, hallucinated motion.
-
-Score = exp(−mean_error / τ),  τ = 0.15,  range [0, 1].  Higher = better.
-
-Adopted as the motion-smoothness measure in VBench (Huang et al., CVPR 2024),
-which uses the same RAFT + warp-error formulation for video generation eval.
-"""
-
 import numpy as np
 import torch
 import torch.nn.functional as F
 import cv2
 from PIL import Image
 import torchvision.transforms.functional as TVF
-
-
-# ---------------------------------------------------------------------------
-# RAFT model singleton
-# ---------------------------------------------------------------------------
 
 _raft = None
 _raft_device = None
@@ -93,10 +71,6 @@ def _warp_error(model, device: str,
     return float((warped - t2).abs().mean().item())
 
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
-
 def temporal_flow_score(frames, start: int, end: int,
                         sample_step: int = 4, device: str = None) -> float:
     """
@@ -107,8 +81,8 @@ def temporal_flow_score(frames, start: int, end: int,
     measures the mean L1 photometric error.  Used as the motion-smoothness
     metric in VBench (Huang et al., CVPR 2024).
 
-    Called twice per clip — once for the O phase [0, h_start] and once for
-    the R phase [r_start, N-1]; the H phase is excluded intentionally.
+    Called twice per clip — once for the V phase [0, h_start] and once for
+    the R phase [r_start, N-1]; the D phase is excluded intentionally.
 
     Score = exp(−mean_err / 0.15)  ∈  [0, 1].  Higher = smoother.
     """

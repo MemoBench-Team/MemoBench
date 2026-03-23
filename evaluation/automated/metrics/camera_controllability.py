@@ -1,38 +1,3 @@
-"""
-Camera Controllability metric for OHR benchmark.
-
-Measures how closely the generated video's camera trajectory matches the GT
-by comparing per-frame relative rotations between GT and estimated poses.
-
-GT trajectory sources:
-  Synthetic — 81-frame models (LingBot-World, Wan2.2):
-    data/Synthetic_processed/{scene}/{clip_id}/poses.npy
-    (N, 4, 4) c2w_hybrid (c2w_ue @ flip_yz), already in OpenCV camera convention.
-
-  Synthetic — other models (Matrix-Game, Open-SoRA, LTX-Video):
-    data/Synthetic_Raw/{scene}/cameras/camera_full{N}.csv
-    Full 60 fps UE5 camera data. Converted via Euler angles + flip_yz, then
-    downsampled uniformly to n_gen frames.
-
-  Real — all models:
-    data/mapanything/outputs/real/{clip_id}_mapanything.npz
-    key: cam_c2w (N_gt, 4, 4), resampled to n_gen frames.
-
-Generated trajectory estimation:
-  MapAnything feed-forward transformer estimates c2w poses from a sparse set
-  of sampled frames (OpenCV cam2world convention, first frame = reference).
-
-Metric — CameraControllability:
-  Mean geodesic rotation error (degrees) between GT and estimated relative
-  rotations across n_sample consecutive sampled frame pairs.
-  Lower is better.  score = exp(−mean_err / τ), τ = 15°, higher is better.
-
-Applicability:
-  All 5 models for both synthetic and real clips.
-  For I2V models without camera control input this measures trajectory
-  accuracy rather than controllability.
-"""
-
 from __future__ import annotations
 
 import os
@@ -42,17 +7,9 @@ import numpy as np
 import pandas as pd
 import cv2
 
-# ---------------------------------------------------------------------------
-# Paths — configure these for your environment
-# ---------------------------------------------------------------------------
-
 GT_SYN_PROCESSED  = "data/Synthetic_processed"
 GT_SYN_RAW        = "data/Synthetic_Raw"
 GT_REAL_POSES     = "data/mapanything/outputs/real"
-
-# ---------------------------------------------------------------------------
-# UE5 left-handed rotation helpers (same as prepare_5b_fullframes.py)
-# ---------------------------------------------------------------------------
 
 def _Rx_LH(a: float) -> np.ndarray:
     c, s = np.cos(a), np.sin(a)
@@ -101,10 +58,6 @@ def _clip_num(clip_id: str) -> int:
     if not m:
         raise ValueError(f"Cannot parse clip number from '{clip_id}'")
     return int(m.group(1))
-
-# ---------------------------------------------------------------------------
-# GT pose loaders
-# ---------------------------------------------------------------------------
 
 def load_gt_poses_synthetic(scene: str, clip_id: str, n_gen: int) -> np.ndarray | None:
     """
@@ -175,10 +128,6 @@ def load_intrinsics_real(clip_id: str) -> np.ndarray | None:
     data = np.load(npz_path)
     return data["intrinsic"].astype(np.float64)
 
-# ---------------------------------------------------------------------------
-# MapAnything singleton
-# ---------------------------------------------------------------------------
-
 _mapanything_model  = None
 _mapanything_device = None
 
@@ -198,10 +147,6 @@ def _load_mapanything(device: str = None):
     ).to(device)
     _mapanything_model.eval()
     return _mapanything_model, _mapanything_device
-
-# ---------------------------------------------------------------------------
-# Pose estimation from generated frames via MapAnything
-# ---------------------------------------------------------------------------
 
 def _estimate_poses_mapanything(
     frames,
@@ -248,10 +193,6 @@ def _estimate_poses_mapanything(
         return None
     return np.stack(poses, axis=0).astype(np.float64)   # (K, 4, 4)
 
-# ---------------------------------------------------------------------------
-# Rotation helpers
-# ---------------------------------------------------------------------------
-
 def _relative_rotations(poses: np.ndarray) -> list[np.ndarray]:
     """Return (N-1) relative rotation matrices from absolute c2w sequence."""
     rels = []
@@ -267,10 +208,6 @@ def _geodesic_deg(R1: np.ndarray, R2: np.ndarray) -> float:
     R_diff = R1.T @ R2
     trace  = float(np.clip((np.trace(R_diff) - 1.0) / 2.0, -1.0, 1.0))
     return float(np.degrees(np.arccos(trace)))
-
-# ---------------------------------------------------------------------------
-# Main metric
-# ---------------------------------------------------------------------------
 
 def camera_controllability_score(
     frames,
@@ -335,7 +272,6 @@ def camera_controllability_score(
     R_gt  = [gt_sampled[i][:3, :3] for i in range(n)]
     R_est = [est_poses[i][:3, :3]  for i in range(n)]
 
-    # ── ATE rotation ────────────────────────────────────────────────────────
     # Align first frame: R_align maps estimated frame-0 onto GT frame-0
     R_align    = R_gt[0] @ R_est[0].T
     ate_errors = [_geodesic_deg(R_align @ R_est[i], R_gt[i]) for i in range(n)]
@@ -349,7 +285,6 @@ def camera_controllability_score(
     denom    = max(total_gt_rot, min_gt_rotation_deg)
     coverage = max(0.0, 1.0 - ate_rot / denom)
 
-    # ── diagnostic: mean frame-to-frame error (kept for reference) ──────────
     gt_rels  = _relative_rotations(gt_sampled[:n])
     est_rels = _relative_rotations(np.array(R_est))
     frame_errors = [_geodesic_deg(a, b) for a, b in zip(gt_rels, est_rels)]

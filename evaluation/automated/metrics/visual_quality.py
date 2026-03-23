@@ -1,26 +1,3 @@
-"""
-Visual quality metrics:
-
-  AestheticScore  — LAION aesthetic predictor (linear probe on CLIP ViT-L/14).
-                    Scores visual attractiveness: composition, color, lighting.
-                    Range ~0–10, higher is better.
-
-  ImageQuality    — MUSIQ (pyiqa, 2022) blind IQA trained on diverse distortions
-                    including blocking/mosaic, blur, noise, compression artifacts.
-                    Falls back to BRISQUE then Laplacian if pyiqa not installed.
-                    Normalised to [0, 1].
-
-  ImageRewardScore — ImageReward (2023) human-preference reward model.
-                    Takes (frames, prompt) — penalises low-quality/distorted
-                    images that don't match the text description, including
-                    mosaic, hallucinated content, and identity drift.
-                    Normalised raw score (~-2..+2) to [0, 1] via sigmoid.
-                    Only computed when a non-empty prompt is provided.
-                    Install: pip install image-reward
-
-All frame-level scores are averaged over every `sample_step`-th frame.
-"""
-
 import numpy as np
 import torch
 import torch.nn as nn
@@ -29,10 +6,6 @@ import os
 import cv2
 from PIL import Image
 
-
-# ---------------------------------------------------------------------------
-# LAION aesthetic predictor
-# ---------------------------------------------------------------------------
 
 _AESTHETIC_URL = (
     "https://github.com/christophschuhmann/improved-aesthetic-predictor"
@@ -118,17 +91,7 @@ def aesthetic_score(frames, sample_step: int = 5, device: str = None) -> float:
     return round(float(np.mean(scores)), 4) if scores else 0.0
 
 
-# ---------------------------------------------------------------------------
-# Image quality: CLIP-IQA+ via pyiqa  (Wang et al., AAAI 2023)
-#
-# CLIP-IQA+ uses a CLIP-based prompt-pair contrastive approach to assess
-# perceptual quality without reference images. Trained on human opinion
-# scores; sensitive to blocking / mosaic, blur, noise, and compression.
-# Also used by WorldScore (Duan et al., ICCV 2025) for Subjective Quality.
-#
-# Falls back to MUSIQ → Laplacian if pyiqa is not installed or unavailable.
-# ---------------------------------------------------------------------------
-
+# CLIP-IQA+ via pyiqa; falls back to MUSIQ then Laplacian.
 _iqa_metric = None
 _iqa_device = None
 _iqa_backend = None   # "clipiqa+" | "musiq" | "laplacian"
@@ -203,12 +166,6 @@ def image_quality_score(frames, sample_step: int = 5, device: str = None) -> flo
         scores.append(_iqa_single(metric, backend, device, frames.get(idx)))
     return round(float(np.mean(scores)), 4) if scores else 0.0
 
-
-# ---------------------------------------------------------------------------
-# ImageReward (2023) — human-preference reward model
-# https://github.com/zai-org/ImageReward
-# pip install image-reward
-# ---------------------------------------------------------------------------
 
 _ir_model = None
 _ir_device = None

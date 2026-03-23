@@ -1,20 +1,3 @@
-"""
-CLIP-based metrics:
-  - SceneConsistency: mean consecutive CLIP cosine similarity across sampled frames
-    within a given [start, end] range. Catches sudden scene identity shifts.
-      - scene_consistency    : mean of sim(frame_i, frame_{i+1})
-      - min_consecutive_sim  : minimum consecutive sim (detects sudden jumps)
-
-  - RevisitMetrics: phase-aware OHR metrics using CLIP similarity vs frame_0.
-      - revisit_recovery : (s_R - s_H) / (s_O - s_H + ε) — how much R phase
-                           recovers toward O phase baseline after H phase drop
-      - revisit_bridge   : sim(frame[h_start], frame[r_start]) — scene
-                           continuity across the hidden interval boundary
-
-  - PromptAlignment: mean CLIP cosine similarity between the text prompt and
-    sampled frames. Measures instruction/prompt following quality.
-"""
-
 import numpy as np
 import torch
 from PIL import Image
@@ -71,8 +54,8 @@ def scene_consistency_score(frames, n_sample: int = 9, device: str = None,
     Mean CLIP cosine similarity between consecutive sampled frames within
     [start, end]. Catches sudden scene identity shifts or jump cuts.
 
-    For phase-aware OHR evaluation call with start/end set to the O or R phase
-    boundaries to avoid penalising the intentional camera motion in H phase.
+    For phase-aware V-D-R evaluation call with start/end set to the V or R phase
+    boundaries to avoid penalising the intentional camera motion in D phase.
 
     Returns:
       - scene_consistency  : mean consecutive cosine similarity
@@ -100,26 +83,26 @@ def scene_consistency_score(frames, n_sample: int = 9, device: str = None,
 def revisit_metrics(frames, h_start: int, r_start: int,
                     n_sample: int = 6, device: str = None) -> dict:
     """
-    Phase-aware OHR metrics using CLIP similarity vs frame_0 as the anchor.
+    Phase-aware V-D-R metrics using CLIP similarity vs frame_0 as the anchor.
 
     Splits the video into three phases using the GT-derived keyframe boundaries:
-      O phase: [0,       h_start]  — observer sees target
-      H phase: [h_start, r_start]  — target is hidden (outside FOV)
+      V phase: [0,       h_start]  — observer sees target
+      D phase: [h_start, r_start]  — target is hidden (outside FOV)
       R phase: [r_start, N-1    ]  — target re-enters FOV
 
     Computes mean CLIP cosine similarity vs frame_0 for each phase:
       s_O, s_H, s_R
 
     RevisitRecovery:
-      Measures how much the R phase recovered toward the O phase baseline
-      after the H phase drop.
+      Measures how much the R phase recovered toward the V phase baseline
+      after the D-phase drop.
         recovery = clip((s_R - s_H) / (s_O - s_H + ε), 0, 1)
-        1.0 → R phase fully returns to O phase similarity level
-        0.0 → R phase stays at H phase level (no semantic recovery)
+        1.0 → R phase fully returns to V phase similarity level
+        0.0 → R phase stays at D phase level (no semantic recovery)
 
     RevisitBridge:
       CLIP cosine similarity between frame[h_start] and frame[r_start].
-      Measures whether there is an abrupt scene jump at the H→R boundary.
+      Measures whether there is an abrupt scene jump at the D→R boundary.
       Low value → identity reset or jump cut across the hidden interval.
 
     Returns:
@@ -145,21 +128,21 @@ def revisit_metrics(frames, h_start: int, r_start: int,
     s_H = phase_mean_sim(h, r)
     s_R = phase_mean_sim(r, N - 1)
 
-    # RevisitRecovery: how much of the H-phase drop was recovered in R phase
+    # RevisitRecovery: how much of the D-phase drop was recovered in R phase
     drop = s_O - s_H
     if drop < 1e-4:
-        # No meaningful drop in H phase — check R is at least as good as O
+        # No meaningful drop in D phase — check R is at least as good as V phase
         recovery = 1.0 if s_R >= s_O - 0.01 else float(np.clip(s_R / (s_O + 1e-6), 0.0, 1.0))
     else:
         recovery = float(np.clip((s_R - s_H) / drop, 0.0, 1.0))
 
-    # RevisitBridge: continuity at the H→R boundary
+    # RevisitBridge: continuity at the D→R boundary
     emb_h_end   = _embed(model, preprocess, device, frames.get(h))
     emb_r_start = _embed(model, preprocess, device, frames.get(r))
     bridge = float(np.dot(emb_h_end, emb_r_start))
 
-    # OcclusionDrop: H phase must actually move away from O phase baseline.
-    # Low value → model never "left" target (H phase same as O) → Recovery invalid.
+    # OcclusionDrop: D phase must actually move away from V phase baseline.
+    # Low value → model never "left" target (D phase same as V phase) → Recovery invalid.
     occlusion_drop = float(np.clip((s_O - s_H) / (s_O + 1e-6), 0.0, 1.0))
 
     return {

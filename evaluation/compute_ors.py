@@ -1,20 +1,3 @@
-#!/usr/bin/env python
-"""
-compute_ors.py — Object Revisit Score (ORS)
-
-For each clip × model:
-  1. Load GT mask (SAM-3 frame-0 target-object mask)
-  2. Find generated video frames, determine R-phase range
-  3. Run SAM-3 on sampled R-phase frames to detect target object
-  4. Resize GT mask to match generated frame resolution
-  5. ORS = max IoU(detected_mask_in_R, resized_GT_mask)
-
-Usage:
-  python compute_ors.py --model-name LingBot-World
-  python compute_ors.py --model-name CogVideoX --r-sample 5
-  python compute_ors.py --model-name all           # runs all 6 models
-"""
-
 import os
 import sys
 import re
@@ -32,7 +15,6 @@ os.environ['OPENCV_IO_ENABLE_OPENEXR'] = '1'
 sys.path.insert(0, os.environ.get("SAM3_DIR", "third_party/sam3"))
 import cv2
 
-# ── Paths — update these for your environment ────────────────────────────────
 GT_SYNTHETIC       = "data/Synthetic_processed"
 GT_REAL            = "data/Real_Raw"
 KF_SYN_XLS         = "data/Synthetic_processed/Synthetic_ExitReenter.xlsx"
@@ -42,7 +24,6 @@ SAM3_OUT_REAL      = "data/sam3_output/real"
 SAM3_DATA          = "data/sam3_metadata"
 OUTPUT_DIR         = "ors_results"
 
-# ── Per-model generated video directories — update for your setup ─────────────
 MODEL_CONFIGS = {
     "LingBot-World": {
         "synthetic": ["output/lingbot-world/Synthetic"],
@@ -80,8 +61,6 @@ MODEL_CONFIGS = {
 
 _CLIP_RE = re.compile(r"^(.+)_(\d+)$")
 
-
-# ── Keyframe loading ──────────────────────────────────────────────────────────
 
 def load_keyframe_map_synthetic() -> dict:
     """Returns {video_folder: {"h_start": int, "r_start": int}}."""
@@ -129,8 +108,6 @@ def map_keyframes(h_gt, r_gt, gt_total, gen_total):
     return int(h), int(r)
 
 
-# ── GT frame count ────────────────────────────────────────────────────────────
-
 def gt_frame_count_synthetic(scene, clip_name):
     intr_path = os.path.join(GT_SYNTHETIC, scene, clip_name, "intrinsics.npy")
     if os.path.exists(intr_path):
@@ -145,8 +122,6 @@ def gt_frame_count_real(clip_id):
             return sum(1 for line in f if line.strip())
     return None
 
-
-# ── SAM-3 metadata (subject text prompts + GT mask paths) ────────────────────
 
 def load_sam3_metadata():
     syn_meta, real_meta = {}, {}
@@ -178,8 +153,6 @@ def load_sam3_metadata():
     return syn_meta, real_meta
 
 
-# ── Prompt extraction (same as run_final.py) ──────────────────────────────────
-
 def extract_subject_phrase(prompt_text):
     """Extract 'sees [text](subject) ...' for SAM-3 context."""
     m = re.search(r'sees (.*?\(subject\)[^.,]*)', prompt_text, re.IGNORECASE)
@@ -187,8 +160,6 @@ def extract_subject_phrase(prompt_text):
         return m.group(1).strip().rstrip('.,')
     return None
 
-
-# ── Generated video frame discovery ───────────────────────────────────────────
 
 def find_gen_frames(search_dirs, clip_name):
     """
@@ -297,8 +268,6 @@ def find_gen_mp4_real(search_dirs, clip_id):
     return None
 
 
-# ── SAM-3 inference ───────────────────────────────────────────────────────────
-
 def init_sam3():
     from sam3.model_builder import build_sam3_image_model
     from sam3.model.sam3_image_processor import Sam3Processor
@@ -345,8 +314,6 @@ def run_sam3_on_frame(processor, frame_bgr, prompt_str):
     _, _, best_score = pool[0]
     return True, best_score
 
-
-# ── Core ORS computation ─────────────────────────────────────────────────────
 
 def compute_ors_for_clip(processor, frame_paths_or_arrays, r_start,
                           prompt_str, is_bgr_arrays=False):
@@ -403,8 +370,6 @@ def compute_ors_for_clip(processor, frame_paths_or_arrays, r_start,
     }
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
-
 def parse_args():
     parser = argparse.ArgumentParser(description="Compute Object Revisit Score (ORS)")
     parser.add_argument(
@@ -430,7 +395,6 @@ def run_model(model_name, processor, syn_meta, real_meta, kf_syn, kf_real, args)
 
     out_csv = os.path.join(out_dir, "ors_scores.csv")
 
-    # Load existing results for --skip-existing
     existing = set()
     if args.skip_existing and os.path.exists(out_csv):
         for row in csv.DictReader(open(out_csv)):
@@ -439,7 +403,6 @@ def run_model(model_name, processor, syn_meta, real_meta, kf_syn, kf_real, args)
     results = []
     total = failed = skipped = 0
 
-    # ── Synthetic clips ───────────────────────────────────────────────────
     syn_items = sorted(syn_meta.items())
     for clip_id, meta in tqdm(syn_items, desc=f"[{model_name}] Synthetic", unit="clip"):
         total += 1
@@ -488,7 +451,6 @@ def run_model(model_name, processor, syn_meta, real_meta, kf_syn, kf_real, args)
             "n_r_frames": ors["n_r_frames"], "n_detected": ors["n_detected"],
         })
 
-    # ── Real clips ────────────────────────────────────────────────────────
     real_items = sorted(real_meta.items())
     for clip_id, meta in tqdm(real_items, desc=f"[{model_name}] Real", unit="clip"):
         total += 1
@@ -531,11 +493,9 @@ def run_model(model_name, processor, syn_meta, real_meta, kf_syn, kf_real, args)
             "n_r_frames": ors["n_r_frames"], "n_detected": ors["n_detected"],
         })
 
-    # ── Save CSV ──────────────────────────────────────────────────────────
     if results:
         fieldnames = results[0].keys()
 
-        # Append to existing or create new
         if args.skip_existing and os.path.exists(out_csv):
             with open(out_csv, 'a', newline='') as f:
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -546,7 +506,6 @@ def run_model(model_name, processor, syn_meta, real_meta, kf_syn, kf_real, args)
                 writer.writeheader()
                 writer.writerows(results)
 
-    # Summary
     if results:
         syn_scores = [r["ors"] for r in results if r["data_type"] == "synthetic"]
         real_scores = [r["ors"] for r in results if r["data_type"] == "real"]

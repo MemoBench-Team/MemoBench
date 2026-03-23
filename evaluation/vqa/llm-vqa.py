@@ -14,10 +14,6 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "YOUR_API_KEY_HERE")
 client = genai.Client(api_key=GEMINI_API_KEY)
 MODEL_ID = "gemini-3.1-pro-preview"
 
-# ── Per-model directory configs ───────────────────────────────────────────────
-# Each model lists all directories (synthetic + real) to search.
-
-# ── Per-model directory configs ───────────────────────────────────────────────
 # Update these paths to point to your generated video directories.
 # Each model lists directories (synthetic + real) to search for frames/mp4s.
 MODEL_CONFIGS = {
@@ -56,7 +52,6 @@ MODEL_CONFIGS = {
 }
 
 
-# ── Frame helpers ─────────────────────────────────────────────────────────────
 
 def find_frames_dir(search_dirs, folder):
     """
@@ -138,7 +133,6 @@ def frames_to_video(frames_dir, fps=16):
     return tmp.name
 
 
-# ── JSON helpers ──────────────────────────────────────────────────────────────
 
 def extract_json(text):
     """Parse JSON from Gemini response — handles ```json...``` or plain JSON."""
@@ -151,7 +145,6 @@ def extract_json(text):
     return json.loads(text)
 
 
-# ── Gemini upload helpers ──────────────────────────────────────────────────────
 
 def upload_and_wait(file_path, kind="file"):
     print(f"  Uploading {kind}: {file_path}")
@@ -168,7 +161,6 @@ def upload_and_wait(file_path, kind="file"):
         time.sleep(5)
 
 
-# ── Question generation (kept from new version) ──────────────────────────────
 
 def generate_questions(img_path, generation_prompt):
     img_file = upload_and_wait(img_path, "image")
@@ -205,7 +197,6 @@ JSON only — columns: [ID, Dimension, Dimension Polarity, Question]
     return response.text
 
 
-# ── Evaluation ────────────────────────────────────────────────────────────────
 
 def evaluate_video(video_path, questions):
     video_file = upload_and_wait(video_path, "video")
@@ -305,7 +296,6 @@ def compute_scores(evaluation_json, questions_json=None):
     return {dim: round(score[dim] / count[dim], 4) for dim in score}
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -322,18 +312,16 @@ def parse_args():
              "If not set, uses the built-in config for --model-name."
     )
     parser.add_argument(
-        "--output-dir", default="/VQA/score-mixed-polarities",
-        help="Root output directory. Scores saved to {output_dir}/{model_name}/. "
-             "Default: /VQA/score-mixed-polarities"
+        "--output-dir", default="vqa_results",
+        help="Root output directory. Scores saved to {output_dir}/{model_name}/."
     )
     parser.add_argument(
-        "--cases-csv", default="/VQA/failure-cases.csv",
-        help="Path to cases CSV. Default: /VQA/failure-cases.csv"
+        "--cases-csv", default="data/vqa_questions/failure-cases.csv",
+        help="Path to cases CSV."
     )
     parser.add_argument(
-        "--questions-dir", default="/VQA/questions-mixed-polarities",
-        help="Directory containing per-clip question CSVs. "
-             "Default: /VQA/questions-mixed-polarities"
+        "--questions-dir", default="data/vqa_questions",
+        help="Directory containing per-clip question CSVs."
     )
     parser.add_argument(
         "--skip-existing", action="store_true",
@@ -372,7 +360,7 @@ if __name__ == "__main__":
         folder   = case["folder"]
         clip_id  = f"{scene}-{video_id}"
 
-        # ── Skip if already done ───────────────────────────────────────────
+        # Skip if already done
         out_path = os.path.join(score_dir, f"{clip_id}.csv")
         if args.skip_existing and os.path.exists(out_path):
             print(f"[SKIP] {clip_id}")
@@ -382,7 +370,7 @@ if __name__ == "__main__":
         print(f"\n{'='*60}")
         print(f"[{clip_id}]  folder={folder}")
 
-        # ── Find frames dir or direct mp4 ─────────────────────────────────
+        # Find frames dir or direct mp4
         tmp_video = None       # temp file to clean up after use
         video_for_eval = None  # path passed to Gemini
 
@@ -406,7 +394,7 @@ if __name__ == "__main__":
             print(f"  Direct mp4: {direct_mp4}")
             video_for_eval = direct_mp4
 
-        # ── Load questions ─────────────────────────────────────────────────
+        # Load questions
         q_path = os.path.join(args.questions_dir, f"{clip_id}-questions.csv")
         if not os.path.exists(q_path):
             print(f"[WARN] Questions not found: {q_path} — skipping")
@@ -425,7 +413,7 @@ if __name__ == "__main__":
         questions = q_rows[0]["Final questions"]
         questions_json = json.loads(questions)
 
-        # ── Evaluate via Gemini (with retry on transient errors) ────────
+        # Evaluate via Gemini (with retry on transient errors)
         evaluation_json = None
         max_retries = 1
         for attempt in range(1, max_retries + 1):
@@ -454,7 +442,7 @@ if __name__ == "__main__":
         score = compute_scores(evaluation_json, questions_json)
         print(f"  Scores: {json.dumps(score)}")
 
-        # ── Save per-clip CSV ──────────────────────────────────────────────
+        # Save per-clip CSV
         row = {
             "scene":      scene,
             "video_id":   video_id,
@@ -469,7 +457,7 @@ if __name__ == "__main__":
         print(f"  Saved → {out_path}")
         outputs.append(row)
 
-    # ── Overall summary CSV ────────────────────────────────────────────────
+    # Overall summary CSV
     if outputs:
         summary_rows = []
         for row in outputs:

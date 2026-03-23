@@ -1,64 +1,3 @@
-"""
-OHR evaluation — Observe · Hidden-interval · Revisit.
-
-Two data modes:
-  synthetic  UE5-rendered clips
-    GT:        data/Synthetic_processed/{Scene}/{Scene_NNN}/
-                 image.jpg         - reference image (single frame GT)
-                 intrinsics.npy    - (N_gt, 4) float: [fx, fy, cx, cy] per GT frame
-               N_gt from intrinsics.npy.shape[0] = total UE5 rendered frames
-    Generated: output/{model}/Synthetic/{Scene}/{Scene_NNN}/frames/*.png
-               or flat: output/{model}/{Scene_NNN}/frames/*.png
-               or PNG direct (no frames/ subdir): output/{model}/{Scene}/{Scene_NNN}/*.png
-    Keyframes: data/Synthetic_processed/Synthetic_ExitReenter.xlsx
-               columns: video_folder | exits | re-enter | frame_num | skip | prompt
-               exits / re-enter are in GT (UE5) frame space → scaled to gen frames
-
-  real       Real-world OHR clips
-    GT:        data/Real_Raw/{NNN}/
-                 {NNN}.mp4              - GT video
-                 {NNN}-intrinsics.json  - {"camera": {fx, fy, cx, cy, ...}}
-                 timestamps.txt         - one timestamp per GT frame
-    Generated: output/{model}/Real/{NNN}/frames/*.png
-               or named: real_{NNN}/ (OpenSora convention)
-    Keyframes: data/Real_ExitReenter.xlsx
-               columns: id | exit | reenter
-               exit / reenter are in GT frame space → scaled to gen frames
-
-Per-model example commands:
-  python run_eval.py --mode synthetic --gen_root output/lingbot-world/Synthetic
-  python run_eval.py --mode real      --gen_root output/lingbot-world/Real
-  python run_eval.py --mode synthetic --gen_root output/wan2.2/Synthetic_81
-  python run_eval.py --mode real      --gen_root output/wan2.2/real_81
-  python run_eval.py --mode synthetic --gen_root output/matrix-game/matrixgame_outputs
-  python run_eval.py --mode real      --gen_root output/matrix-game/matrixgame_outputs_realvideo
-  python run_eval.py --mode synthetic --gen_root output/open-sora/video_256px_final/frames
-  python run_eval.py --mode real      --gen_root output/open-sora/video_256px_real/frames
-
-Phase-aware evaluation using h_start / r_start (scaled to generated video):
-  O phase: [0,       h_start]   — observer sees target
-  H phase: [h_start, r_start]   — target is hidden (outside FOV)
-  R phase: [r_start, N-1    ]   — target re-enters FOV
-
-Composite metrics (0-100) — reported individually, no single aggregate score:
-  MotionSmoothness       - RAFT optical-flow warp stability (O + R phases only)
-  VisualQuality          - CLIP-IQA+ quality + LAION aesthetic (full video)
-  ObjIdentityConsistency - DINOv2 patch-token identity: frame_0 vs R-phase (top-40% stable)
-  Geo3DConsistency       - Depth Anything V2 depth-map cosine sim (O + R phases)
-  GTRevisitSim           - CLIP sim: generated R-phase frames vs GT R-phase frames (GT-grounded)
-  GT_{O,H,R,ALL}_PSNR/SSIM/LPIPS - per-frame pixel fidelity per phase + whole video
-  ImageRewardScore       - ImageReward human preference score (NaN when no prompt)
-  CameraControllability  - geodesic rotation error vs GT poses (lingbot-world, wan2.2 only)
-
-Diagnostic columns (raw):
-  AestheticScore     - LAION aesthetic predictor score (~0-10)
-  ImageQuality       - CLIP-IQA+ score (~0-1)
-  ObjIdentityMean    - mean DINOv2 patch-token sim across R-phase frames
-  ObjIdentityMin     - minimum DINOv2 patch-token sim in R phase
-  GeoConsistencyMean - mean Depth Anything V2 cosine sim (O+R)
-  GeoConsistencyMin  - minimum depth cosine sim (O+R)
-"""
-
 import os
 import re
 import logging
@@ -72,8 +11,8 @@ from datetime import datetime
 logging.getLogger().setLevel(logging.WARNING)
 logging.disable(logging.INFO)   # suppress per-clip tokenizer spam from open_clip/ImageReward
 
-from ohr.io.frames import FrameReader, VideoReader
-from ohr.io.metadata import (
+from automated.io.frames import FrameReader, VideoReader
+from automated.io.metadata import (
     load_intrinsics,
     load_gt_frame_count_synthetic,
     load_intrinsics_json,
@@ -81,27 +20,22 @@ from ohr.io.metadata import (
     extract_gt_frame_at,
     extract_gt_frames_batch,
 )
-from ohr.metrics.reference_fidelity import gt_phase_pixel_fidelity
-from ohr.metrics.temporal import temporal_flow_score
-from ohr.metrics.visual_quality import aesthetic_score, image_quality_score, image_reward_score
-from ohr.metrics.geometry import (
+from automated.metrics.reference_fidelity import gt_phase_pixel_fidelity
+from automated.metrics.temporal import temporal_flow_score
+from automated.metrics.visual_quality import aesthetic_score, image_quality_score, image_reward_score
+from automated.metrics.geometry import (
     geometry_3d_consistency,
     object_centric_identity_consistency,
 )
-from ohr.metrics.camera_controllability import (
+from automated.metrics.camera_controllability import (
     load_gt_poses_synthetic,
     load_gt_poses_real,
     load_intrinsics_synthetic,
     load_intrinsics_real,
     camera_controllability_score,
 )
-from ohr.metrics.clip_metrics import clip_frame_similarity
+from automated.metrics.clip_metrics import clip_frame_similarity
 
-# ---------------------------------------------------------------------------
-# Paths
-# ---------------------------------------------------------------------------
-
-# ── Configure these paths for your environment ──
 GT_ROOT_SYNTHETIC  = "data/Synthetic_processed"
 GEN_ROOT_SYNTHETIC = "output/Synthetic"                      # default; override with --gen_root
 KEYFRAMES_SYN_XLS  = "data/Synthetic_processed/Synthetic_ExitReenter.xlsx"
@@ -132,10 +66,6 @@ def _synthetic_gt_video_path(video_folder: str) -> str:
 
 OUT_DIR = "outputs"
 
-# ---------------------------------------------------------------------------
-# Normalization ranges  raw → 0-100
-# ---------------------------------------------------------------------------
-
 _RAW_NORM = {
     "TemporalScore":      (0,    1),
     "AestheticScore":     (0,   10),
@@ -149,10 +79,6 @@ _RAW_NORM = {
     "CameraControllability": (0, 1),  # geodesic rotation error → exp score
     # GT_R_PSNR / GT_R_SSIM / GT_R_LPIPS are reported as raw values (no fixed range)
 }
-
-# ---------------------------------------------------------------------------
-# Composite metrics
-# ---------------------------------------------------------------------------
 
 _COMPOSITE_COLS = [
     "MotionSmoothness",
@@ -168,7 +94,7 @@ _COMPOSITE_COLS = [
 def _compute_composite(df: pd.DataFrame) -> pd.DataFrame:
     """Build the named composite metrics (0-100) from normalized raw columns."""
 
-    # MotionSmoothness (O+R phases only)
+    # MotionSmoothness (V+R phases only)
     if "TemporalScore_pct" in df.columns:
         df["MotionSmoothness"] = df["TemporalScore_pct"].round(2)
 
@@ -177,7 +103,7 @@ def _compute_composite(df: pd.DataFrame) -> pd.DataFrame:
     if vq_cols:
         df["VisualQuality"] = df[vq_cols].mean(axis=1).round(2)
 
-    # Geo3DConsistency (O+R phases)
+    # Geo3DConsistency (V+R phases)
     has_geo_mean = "GeoConsistencyMean_pct" in df.columns
     has_geo_min  = "GeoConsistencyMin_pct"  in df.columns
     if has_geo_mean and has_geo_min:
@@ -187,7 +113,7 @@ def _compute_composite(df: pd.DataFrame) -> pd.DataFrame:
     elif has_geo_mean:
         df["Geo3DConsistency"] = df["GeoConsistencyMean_pct"].round(2)
 
-    # Prompt-conditioned metrics — NaN for clips without prompts; skipna=True in OHRScore mean
+    # Prompt-conditioned metrics — NaN for clips without prompts; skipna=True in V-D-R Score mean
     if "ImageRewardScore_pct" in df.columns:
         df["ImageRewardScore"] = df["ImageRewardScore_pct"].round(2)
 
@@ -211,10 +137,6 @@ def _compute_composite(df: pd.DataFrame) -> pd.DataFrame:
 
     return df
 
-
-# ---------------------------------------------------------------------------
-# Keyframe loading
-# ---------------------------------------------------------------------------
 
 def load_keyframe_map_synthetic() -> dict:
     """
@@ -354,14 +276,10 @@ def load_prompt_map_real(prompt_src: str) -> dict:
     return result
 
 
-# ---------------------------------------------------------------------------
-# Phase boundary mapping
-# ---------------------------------------------------------------------------
-
 def map_keyframes(h_gt: int, r_gt: int, gt_total: int, gen_total: int) -> tuple:
     """
     Scale GT keyframe indices to generated video frame space.
-    Ensures at least 2 frames exist in each of the O and R phases.
+    Ensures at least 2 frames exist in each of the V and R phases.
     """
     h = round(h_gt / gt_total * gen_total)
     r = round(r_gt / gt_total * gen_total)
@@ -369,10 +287,6 @@ def map_keyframes(h_gt: int, r_gt: int, gt_total: int, gen_total: int) -> tuple:
     r = max(h + 2, min(r, gen_total - 1))
     return int(h), int(r)
 
-
-# ---------------------------------------------------------------------------
-# Clip discovery helpers
-# ---------------------------------------------------------------------------
 
 _CLIP_NAME_RE = re.compile(r"^(.+)_(\d+)$")
 
@@ -442,10 +356,6 @@ def _add_synthetic_clip(clips: list, clip_name: str, scene: str,
         "prompt":        prompt,
     })
 
-
-# ---------------------------------------------------------------------------
-# Clip discovery
-# ---------------------------------------------------------------------------
 
 def discover_clips_synthetic(gen_root: str = GEN_ROOT_SYNTHETIC,
                               prompt_map: dict = None) -> list:
@@ -595,12 +505,8 @@ def discover_clips_real(gen_root: str = GEN_ROOT_REAL,
     return clips
 
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-
 def main():
-    ap = argparse.ArgumentParser(description="OHR evaluation.")
+    ap = argparse.ArgumentParser(description="MemoBench evaluation.")
     ap.add_argument("--mode", choices=["synthetic", "real", "both"],
                     default="synthetic",
                     help="Which data type to evaluate. Default: synthetic.")
@@ -709,10 +615,6 @@ def main():
         print(df[present_diag].mean().to_string())
 
 
-# ---------------------------------------------------------------------------
-# Per-clip evaluation
-# ---------------------------------------------------------------------------
-
 def _eval_clip(clip: dict, max_side: int, sample_step: int, device: str,
                camera_ctrl: bool = False) -> dict:
     data_type = clip["data_type"]
@@ -734,7 +636,7 @@ def _eval_clip(clip: dict, max_side: int, sample_step: int, device: str,
         clip["h_start_gt"], clip["r_start_gt"], gt_total, N
     )
 
-    # 1. Motion smoothness — O + R phases only (H phase excluded)
+    # 1. Motion smoothness — V + R phases only (D phase excluded)
     temp_scores = []
     if h_start >= 2:
         temp_scores.append(temporal_flow_score(gen, start=0, end=h_start,
@@ -752,7 +654,7 @@ def _eval_clip(clip: dict, max_side: int, sample_step: int, device: str,
     obj_id_res = object_centric_identity_consistency(gen, n_sample=9, device=device,
                                                      start=r_start, end=N - 1)
 
-    # 5. Geo3D consistency — O + R phases (Depth Anything V2 cosine similarity)
+    # 5. Geo3D consistency — V + R phases (Depth Anything V2 cosine similarity)
     geo_o = geometry_3d_consistency(gen, device=device, n_sample=3,
                                     start=0, end=h_start)
     geo_r = geometry_3d_consistency(gen, device=device, n_sample=3,
@@ -861,7 +763,7 @@ def _eval_clip(clip: dict, max_side: int, sample_step: int, device: str,
         "h_start":    h_start,
         "r_start":    r_start,
         "gt_frames":  gt_total,
-        # Motion (O+R only)
+        # Motion (V+R only)
         "TemporalScore": round(temp_score, 4),
         # Visual quality
         "AestheticScore": aes,
@@ -869,19 +771,19 @@ def _eval_clip(clip: dict, max_side: int, sample_step: int, device: str,
         # Object-centric identity (R phase) — patch tokens, top-40%
         "ObjIdentityMean": obj_id_res["obj_identity_consistency"],
         "ObjIdentityMin":  obj_id_res["obj_min_identity_consistency"],
-        # Geo3D consistency (O+R)
+        # Geo3D consistency (V+R)
         "GeoConsistencyMean": geo_mean,
         "GeoConsistencyMin":  geo_min,
         # Prompt-based (when prompt available)
         "ImageRewardScore":   ir,   # ImageReward (2023) human preference
         # GT-grounded fidelity (CLIP sim R-phase; PSNR/SSIM/LPIPS per-frame all phases)
         "GTRevisitSim":  gt_r_clip_sim,  # CLIP sim: generated R-phase vs GT R-phase (3 pairs)
-        "GT_O_PSNR":     gt_o_psnr,      # O-phase pixel PSNR  (all gen frames vs GT resampled)
-        "GT_O_SSIM":     gt_o_ssim,      # O-phase SSIM
-        "GT_O_LPIPS":    gt_o_lpips,     # O-phase LPIPS (lower=better)
-        "GT_H_PSNR":     gt_h_psnr,      # H-phase pixel PSNR
-        "GT_H_SSIM":     gt_h_ssim,      # H-phase SSIM
-        "GT_H_LPIPS":    gt_h_lpips,     # H-phase LPIPS (lower=better)
+        "GT_O_PSNR":     gt_o_psnr,      # V-phase pixel PSNR  (all gen frames vs GT resampled)
+        "GT_O_SSIM":     gt_o_ssim,      # V-phase SSIM
+        "GT_O_LPIPS":    gt_o_lpips,     # V-phase LPIPS (lower=better)
+        "GT_H_PSNR":     gt_h_psnr,      # D-phase pixel PSNR
+        "GT_H_SSIM":     gt_h_ssim,      # D-phase SSIM
+        "GT_H_LPIPS":    gt_h_lpips,     # D-phase LPIPS (lower=better)
         "GT_R_PSNR":     gt_r_psnr,      # R-phase pixel PSNR
         "GT_R_SSIM":     gt_r_ssim,      # R-phase SSIM
         "GT_R_LPIPS":    gt_r_lpips,     # R-phase LPIPS (lower=better)

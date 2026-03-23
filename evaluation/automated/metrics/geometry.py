@@ -1,55 +1,3 @@
-"""
-Geometry metrics module — two distinct consistency signals:
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-1. geometry_3d_consistency  — Geometric / structural stability
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Uses Depth Anything V2 (Yang et al., NeurIPS 2024) monocular depth
-estimation to measure 3D scene structure consistency across frames.
-
-For each consecutive pair of sampled frames:
-  1. Estimate a dense depth map with Depth Anything V2 ViT-S
-  2. Min-max normalise to [0, 1] to remove global scale changes
-  3. Compute cosine similarity between the flattened depth maps
-
-High similarity → 3D scene geometry is temporally stable (no hallucinated
-depth, collapsing structures, or sudden scene changes).
-Low similarity  → scene depth structure is inconsistent or incoherent.
-
-Inspired by WorldScore's 3D Consistency (Duan et al., ICCV 2025), which uses
-DROID-SLAM + reprojection error. We use Depth Anything V2 depth-map cosine
-similarity as a lighter, state-of-the-art 2024 alternative.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-2. identity_consistency     — Appearance / object identity stability
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Uses DINOv2 ViT-B/14 CLS token cosine similarity (Oquab et al., 2023).
-
-DINOv2 is a self-supervised Vision Transformer that produces dense, spatially
-aware features without text supervision. Its [CLS] token embedding captures
-fine-grained visual identity (object texture, colour, shape) far better than
-VGG Gram matrices, which only capture global texture statistics and are
-insensitive to spatial structure.
-
-Approach:
-  For each sampled frame in [start, end]:
-    1. Forward-pass through DINOv2 ViT-B/14 → [CLS] token (768-dim)
-    2. L2-normalise the embedding
-    3. Cosine similarity against the L2-normalised frame_0 embedding
-  Score range is naturally [0, 1] for same-domain images (clipped from [-1,1]).
-
-  High score → visual identity preserved throughout the R phase.
-  Low score  → identity drift / appearance change / object replacement detected.
-
-Three signals together cover different failure modes:
-  SceneConsistency (CLIP)    — semantic:    "is it still the same scene?"
-  Geo3DConsistency (E-mat)   — geometric:   "does the 3D structure stay rigid?"
-  IdentityConsistency (DINOv2) — appearance: "does the visual identity stay the same?"
-
-Reference: DINOv2 — Oquab et al., "DINOv2: Learning Robust Visual Features
-without Supervision", TMLR 2024.
-"""
-
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -57,10 +5,6 @@ import torchvision.transforms as T
 from PIL import Image
 import cv2
 
-
-# ---------------------------------------------------------------------------
-# DINOv2 model singleton
-# ---------------------------------------------------------------------------
 
 _dino = None
 _dino_device = None
@@ -121,10 +65,6 @@ def _dino_similarity(f0: torch.Tensor, fk: torch.Tensor) -> float:
     return float(np.clip(sim, 0.0, 1.0))
 
 
-# ---------------------------------------------------------------------------
-# Public API — IdentityConsistency
-# ---------------------------------------------------------------------------
-
 def identity_consistency(frames, n_sample: int = 9,
                          device: str = None,
                          start: int = 0, end: int = None) -> dict:
@@ -134,7 +74,7 @@ def identity_consistency(frames, n_sample: int = 9,
     Samples n_sample frames uniformly from [start, end]. For each sampled
     frame, computes the DINOv2 cosine similarity against frame_0 (the anchor).
 
-    For phase-aware OHR evaluation pass start=r_start, end=N-1 to measure
+    For phase-aware V-D-R evaluation pass start=r_start, end=N-1 to measure
     whether visual identity survived the hidden interval (frame_0 vs R phase).
 
     Returns:
@@ -172,10 +112,6 @@ def identity_consistency(frames, n_sample: int = 9,
         "min_identity_consistency": round(float(np.min(sims)),  4),
     }
 
-
-# ---------------------------------------------------------------------------
-# Object-centric identity consistency — DINOv2 patch tokens, top-K focus
-# ---------------------------------------------------------------------------
 
 def object_centric_identity_consistency(
     frames,
@@ -247,10 +183,6 @@ def object_centric_identity_consistency(
     }
 
 
-# ---------------------------------------------------------------------------
-# Geometric 3D consistency — Depth Anything V2 cosine similarity
-# ---------------------------------------------------------------------------
-
 _depth_model = None
 _depth_processor = None
 _depth_device = None
@@ -310,8 +242,8 @@ def geometry_3d_consistency(frames, device: str = None,
     High similarity → 3D scene geometry is temporally stable.
     Low similarity  → scene depth structure is inconsistent or incoherent.
 
-    For phase-aware OHR evaluation call once for O phase and once for R phase
-    (excluding H phase where the camera deliberately moves away).
+    For phase-aware V-D-R evaluation call once for V phase and once for R phase
+    (excluding D phase where the camera deliberately moves away).
 
     Returns:
         geo_consistency     : mean cosine similarity across consecutive sampled pairs

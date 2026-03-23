@@ -1,8 +1,9 @@
 #!/bin/bash
 set -e
 
-SCRIPT="/VQA/code/llm-vqa.py"
-LOG_DIR="/VQA/logs"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT="$SCRIPT_DIR/llm-vqa.py"
+LOG_DIR="vqa_logs"
 mkdir -p "$LOG_DIR"
 
 MODELS=(

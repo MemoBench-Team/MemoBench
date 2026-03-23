@@ -43,6 +43,19 @@ output/
 *.mp4
 *.avi
 
+# Results
+ors_results/
+vqa_results/
+vqa_logs/
+leaderboard/leaderboard.csv
+leaderboard/leaderboard.html
+
+# SAM-3 outputs
+data/sam3_output/
+
+# Third-party
+third_party/
+
 # Logs
 *.log
 wandb/
