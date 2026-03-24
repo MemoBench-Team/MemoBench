@@ -156,22 +156,21 @@ output/{model_name}/
 The full evaluation pipeline has three steps:
 
 ```
-Step 1: run_eval.py          (memobench-eval)   → automated metrics CSV
-Step 2: compute_ors.py       (memobench-sam3)   → ORS scores CSV
-Step 3: llm-vqa.py           (memobench-eval)   → VQA scores CSVs
-                                    ↓
-        leaderboard.py       (memobench-eval)   → unified leaderboard
+Step 1: run_eval.py      → automated metrics CSV
+Step 2: compute_ors.py   → ORS scores CSV
+Step 3: llm-vqa.py       → VQA scores CSVs
+        leaderboard.py   → unified leaderboard
 ```
 
-All commands below assume you are in the `MemoBench/` root directory.
-
-### Step 1: Automated Metrics
-
-Computes 13 metrics per clip: VisualQuality, MotionSmoothness, ObjIdentityConsistency, Geo3DConsistency, CameraControllability, ImageRewardScore, and per-phase pixel fidelity (PSNR, SSIM, LPIPS for V/D/R phases).
+All commands below assume you are in the `MemoBench/` root directory with the `memobench` environment activated.
 
 ```bash
 conda activate memobench
 ```
+
+### Step 1: Automated Metrics
+
+Computes 13 metrics per clip: VisualQuality, MotionSmoothness, ObjIdentityConsistency, Geo3DConsistency, CameraControllability, ImageRewardScore, and per-phase pixel fidelity (PSNR, SSIM, LPIPS for V/D/R phases).
 
 **Evaluate synthetic clips:**
 ```bash
@@ -209,10 +208,6 @@ For all command-line options, output format, and implementation details, see [St
 
 ORS measures whether the model regenerates the target object when the camera returns in the R-phase. It uses SAM-3 text-prompted segmentation with the object description from `data/sam3_metadata/`.
 
-```bash
-conda activate memobench
-```
-
 **Before running**, register your model in `compute_ors.py` by adding an entry to the `MODEL_CONFIGS` dict:
 ```python
 MODEL_CONFIGS = {
@@ -248,26 +243,20 @@ python evaluation/compute_ors.py \
     --skip-existing
 ```
 
-For all command-line options, output format, and implementation details, see [Step 2 Supplementary Details](docs/step2-details.md).
-
 **SAM-3 checkpoint location:** By default, `compute_ors.py` looks for SAM-3 at `third_party/sam3/`. To override, set the `SAM3_DIR` environment variable:
 ```bash
 SAM3_DIR=/path/to/sam3 python evaluation/compute_ors.py --model-name MyModel
 ```
 
+For all command-line options, output format, and implementation details, see [Step 2 Supplementary Details](docs/step2-details.md).
+
 ### Step 3: VQA Evaluation
 
 The VQA pipeline uses a Vision-Language Model (VLM) to answer pre-generated Yes/No questions about each generated video. It evaluates four dimensions: Instruction Following, Object & Background, Continuity of Memory, and Physics Adherence.
 
-```bash
-conda activate memobench
-```
-
 **Prerequisites:**
 - A Gemini API key (set as environment variable `GEMINI_API_KEY`)
-- Pre-generated question banks in `data/vqa_questions/` (provided with the dataset)
-
-Questions are pre-generated and filtered; the question banks in `data/vqa_questions/` are provided with the dataset. To regenerate them, see `evaluation/vqa/llm-judger.py`.
+- Pre-generated question banks in `data/vqa_questions/` (provided with the dataset; to regenerate, see `evaluation/vqa/llm-judger.py`)
 
 **Before running**, register your model's video directories in `evaluation/vqa/llm-vqa.py` by adding to `MODEL_CONFIGS`:
 ```python
@@ -295,15 +284,6 @@ python evaluation/vqa/llm-vqa.py \
     --skip-existing
 ```
 
-**Custom paths:**
-```bash
-python evaluation/vqa/llm-vqa.py \
-    --model-name MyModel \
-    --questions-dir data/vqa_questions/ \
-    --output-dir vqa_results/ \
-    --video-dirs output/my-model/Synthetic output/my-model/Real
-```
-
 **Run all registered models:**
 ```bash
 bash evaluation/vqa/run_all_vqa.sh
@@ -318,8 +298,6 @@ For all command-line options, output format, and implementation details, see [St
 After completing all three evaluation steps, aggregate results into a unified leaderboard:
 
 ```bash
-conda activate memobench
-
 python leaderboard/leaderboard.py \
     --eval-dir  outputs/ \
     --ors-dir   ors_results/ \
