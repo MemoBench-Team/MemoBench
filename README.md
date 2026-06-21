@@ -327,7 +327,7 @@ python leaderboard/leaderboard.py --load leaderboard.csv --sort ORS      # sort 
 :trophy: Check out our [Leaderboard on Huggingface](https://huggingface.co/spaces/cavenqjw/MemoBench_Leaderboard) for the latest rankings and numerical results!
 
 How to join the leaderboard:
-- **Submit Results (Highly Recommended):** Follow the evaluation instructions above to generate your leaderboard.csv file. Email it to tonychen54816@gmail.com, and the MemoBench Team will update the leaderboard.
+- **Submit Results (Highly Recommended):** Follow the evaluation instructions above to generate your `leaderboard.csv` file. Email it to tonychen54816@gmail.com, and the MemoBench Team will update the leaderboard.
 - **Submit Video Samples:** Alternatively, you can send us your raw video samples for us to evaluate. Please note that processing times for this method will vary depending on our team's bandwidth and resources.
 
 ---
