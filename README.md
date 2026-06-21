@@ -322,7 +322,7 @@ python leaderboard/leaderboard.py --load leaderboard.csv --format latex
 python leaderboard/leaderboard.py --load leaderboard.csv --sort ORS      # sort by any metric
 ```
 
-**Join the leaderboard**
+**Join the leaderboard:**
 
 :trophy: Check out our [Leaderboard on Huggingface](https://huggingface.co/spaces/cavenqjw/MemoBench_Leaderboard) for the latest rankings and numerical results!
 
