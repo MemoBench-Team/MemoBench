@@ -312,16 +312,6 @@ The leaderboard script automatically:
 - Merges by model name (handles different naming conventions automatically)
 - Converts all scores to their display scale (ORS: 0–1 → 0–100; VQA: 0–1 → 0–100)
 
-**Display and export:**
-```bash
-# View in terminal (default), or export to other formats
-python leaderboard/leaderboard.py --load leaderboard.csv
-python leaderboard/leaderboard.py --load leaderboard.csv --format html    # sortable HTML
-python leaderboard/leaderboard.py --load leaderboard.csv --format markdown
-python leaderboard/leaderboard.py --load leaderboard.csv --format latex
-python leaderboard/leaderboard.py --load leaderboard.csv --sort ORS      # sort by any metric
-```
-
 **Join the leaderboard:**
 
 :trophy: Check out our [Leaderboard on Huggingface](https://huggingface.co/spaces/cavenqjw/MemoBench_Leaderboard) for the latest rankings and numerical results!
