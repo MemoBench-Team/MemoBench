@@ -43,7 +43,7 @@ GT_VIDEOS_SYNTHETIC = "data/Synthetic_videos"                # original UE5 MP4s
 
 GT_ROOT_REAL       = "data/Real_Raw"
 GEN_ROOT_REAL      = "output/Real"                           # default; override with --gen_root
-KEYFRAMES_REAL_XLS = "data/Real_ExitReenter.xlsx"
+KEYFRAMES_REAL_XLS = "data/Real_Raw/Real_ExitReenter.xlsx"
 REAL_SELECTED_XLS  = "data/Real_Selected.xls"                # Availability filter
 
 

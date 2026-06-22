@@ -211,6 +211,11 @@ def aggregate_model(
     # Automated metrics (already 0-100 composite scores)
     if eval_df is not None:
         for m in AUTOMATED_METRICS:
+            # ImageReward is stored raw (can be negative); prefer the 0-100 _pct
+            # column so the displayed value is on the same scale as the paper table.
+            if m == "ImageRewardScore" and "ImageRewardScore_pct" in eval_df.columns:
+                row[m] = eval_df["ImageRewardScore_pct"].mean(skipna=True)
+                continue
             if m in eval_df.columns:
                 val = eval_df[m].mean(skipna=True)
                 # CameraControllability: camfix files store as 0-1, others as 0-100

@@ -28,7 +28,6 @@ data/Synthetic_Raw/
 data/Synthetic_videos/
 data/Real_Raw
 data/Real_Processed/
-data/Real_ExitReenter.xlsx
 data/mapanything/
 
 # Model weights and caches
@@ -41,6 +40,7 @@ models/
 # Generated outputs
 outputs/
 output/
+vqa_input/
 *.mp4
 *.avi
 

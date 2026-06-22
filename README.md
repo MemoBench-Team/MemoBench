@@ -86,8 +86,7 @@ MemoBench/
 │   │   ├── OldFactory/
 │   │   ├── WinterTown/
 │   │   ├── ZenGarden/
-│   │   ├── Synthetic_ExitReenter.xlsx      # V-D-R phase boundaries
-│   │   └── Real_ExitReenter.xlsx           # V-D-R phase boundaries
+│   │   └── Synthetic_ExitReenter.xlsx      # V-D-R phase boundaries (synthetic)
 │   │
 │   ├── Real_Raw/                           # Real-world GT data (164 clips)
 │   │   ├── 001/
@@ -95,26 +94,29 @@ MemoBench/
 │   │   │   ├── 001-intrinsics.json         # {"camera": {fx, fy, cx, cy, ...}}
 │   │   │   └── timestamps.txt             # One timestamp per GT frame
 │   │   ├── 002/
-│   │   └── ...
+│   │   ├── ...
+│   │   └── Real_ExitReenter.xlsx           # V-D-R phase boundaries (real)
 │   ├── mapanything/                        # Pre-estimated GT camera poses
 │   │   └── outputs/
-│   │       └── real/                       # {clip_id}_droid.npz per real clip
+│   │       └── real/                       # {clip_id}_mapanything.npz per real clip
 │   │
 │   ├── sam3_metadata/                      # Object metadata for ORS
 │   │   ├── synthetic_metadata.csv          # scene, video_id, subject, prompt
 │   │   └── real_metadata.csv              # video_id, subject, prompt
 │   │
 │   └── vqa_questions/                      # Pre-generated & filtered VQA
-│       ├── Barnyard-1-questions.csv        # Per-clip question sets
+│       ├── Barnyard-1-questions.csv        # Per-clip question sets (45 files)
 │       ├── Barnyard-2-questions.csv
-│       └── ...                             # 44 files total
+│       ├── ...
+│       └── failure-cases.csv               # VQA clip list: scene, video_id, folder, hint, prompt
 ```
 
 **Key files explained:**
-- `Synthetic_ExitReenter.xlsx` / `Real_ExitReenter.xlsx`: Define the V-D-R phase boundaries per clip. Columns include `exits` (frame where object leaves FOV) and `re-enter` (frame where object returns). These are in GT frame space and are automatically scaled to match the generated video's frame count.
+- `Synthetic_ExitReenter.xlsx` (under `Synthetic_processed/`) / `Real_ExitReenter.xlsx` (under `Real_Raw/`): Define the V-D-R phase boundaries per clip — the frame where the object leaves the FOV and the frame where it returns. The two files use different column names: the synthetic sheet uses `exits` / `re-enter`, the real sheet uses `exit` / `reenter`. These are in GT frame space and are automatically scaled to match the generated video's frame count.
 - `poses.npy` (synthetic) / `mapanything/outputs/real/` (real): GT camera poses. Synthetic poses come from the UE5 renderer. Real-world GT poses are pre-estimated using MapAnything and provided with the dataset — you do not need to run MapAnything on GT videos yourself.
 - `sam3_metadata/*.csv`: Contains the text description of the target object per clip (e.g., "fox", "person in silver suit"), used as the SAM-3 text prompt for ORS.
-- `vqa_questions/*.csv`: Pre-generated and filtered Yes/No question banks (6 per dimension × 4 dimensions).
+- `vqa_questions/*-questions.csv`: Pre-generated and filtered Yes/No question banks (6 per dimension × 4 dimensions).
+- `vqa_questions/failure-cases.csv`: The clip list the VQA step iterates (columns: `scene`, `video_id`, `hint`, `folder`, `Finished`, `prompt`). `folder` is the generated-frames directory name for each clip; `llm-vqa.py` reads this file by default via `--cases-csv`.
 
 ---
 
@@ -170,7 +172,7 @@ conda activate memobench
 
 ### Step 1: Automated Metrics
 
-Computes 13 metrics per clip: VisualQuality, MotionSmoothness, ObjIdentityConsistency, Geo3DConsistency, CameraControllability, ImageRewardScore, and per-phase pixel fidelity (PSNR, SSIM, LPIPS for V/D/R phases).
+Computes the automated metrics per clip: VisualQuality, MotionSmoothness, ObjIdentityConsistency, Geo3DConsistency, CameraControllability, ImageRewardScore, and pixel fidelity (PSNR, SSIM, LPIPS) — reported overall and per V/D/R phase.
 
 **Evaluate synthetic clips:**
 ```bash

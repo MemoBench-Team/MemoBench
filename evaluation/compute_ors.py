@@ -18,7 +18,7 @@ import cv2
 GT_SYNTHETIC       = "data/Synthetic_processed"
 GT_REAL            = "data/Real_Raw"
 KF_SYN_XLS         = "data/Synthetic_processed/Synthetic_ExitReenter.xlsx"
-KF_REAL_XLS        = "data/Real_ExitReenter.xlsx"
+KF_REAL_XLS        = "data/Real_Raw/Real_ExitReenter.xlsx"
 SAM3_OUT_SYN       = "data/sam3_output/synthetic"
 SAM3_OUT_REAL      = "data/sam3_output/real"
 SAM3_DATA          = "data/sam3_metadata"

@@ -49,6 +49,14 @@ MODEL_CONFIGS = {
         "output/stable-virtual-camera/Synthetic",
         "output/stable-virtual-camera/Real",
     ],
+    "HunyuanWorldPlay": [
+        "vqa_input/worldplay/Synthetic",
+        "vqa_input/worldplay/Real",
+    ],
+    "HunyuanGameCraft": [
+        "vqa_input/gamecraft/Synthetic",
+        "vqa_input/gamecraft/Real",
+    ],
 }
 
 
