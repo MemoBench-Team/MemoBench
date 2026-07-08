@@ -8,8 +8,23 @@ import pandas as pd
 import cv2
 
 GT_SYN_PROCESSED  = "data/Synthetic_processed"
-GT_SYN_RAW        = "data/Synthetic_Raw"
-GT_REAL_POSES     = "data/mapanything/outputs/real"
+GT_REAL_ROOT      = "data/Real_Raw"
+GT_REAL_POSES     = "data/mapanything/outputs/real"   # optional collected copy
+
+
+def _real_npz_path(clip_id: str) -> str | None:
+    """
+    Locate the MapAnything npz for a real clip. The released dataset ships it
+    per-clip at Real_Raw/{id}/raw/{id}_mapanything.npz; a collected
+    data/mapanything/outputs/real/ folder is also supported if present.
+    """
+    for p in (
+        os.path.join(GT_REAL_ROOT, clip_id, "raw", f"{clip_id}_mapanything.npz"),
+        os.path.join(GT_REAL_POSES, f"{clip_id}_mapanything.npz"),
+    ):
+        if os.path.exists(p):
+            return p
+    return None
 
 def _Rx_LH(a: float) -> np.ndarray:
     c, s = np.cos(a), np.sin(a)
@@ -63,19 +78,22 @@ def load_gt_poses_synthetic(scene: str, clip_id: str, n_gen: int) -> np.ndarray 
     """
     Load GT c2w poses for a synthetic clip, resampled to n_gen frames.
 
-    Tries Synthetic_processed/poses.npy first (fast path for 81-frame models).
-    Falls back to Synthetic_Raw CSV conversion for other models.
-    Returns (n_gen, 4, 4) float64 or None.
+    Tries the clip's pre-processed poses.npy first ({clip}/{n}/poses.npy in the
+    released layout), then falls back to converting the clip's raw UE5 camera
+    CSV ({clip}/camera_full{n}.csv). Returns (n_gen, 4, 4) float64 or None.
     """
-    # Fast path: pre-processed poses.npy
-    proc_path = os.path.join(GT_SYN_PROCESSED, scene, clip_id, "poses.npy")
-    if os.path.exists(proc_path):
-        poses = np.load(proc_path).astype(np.float64)
-        return _resample(poses, n_gen)
+    clip_dir = os.path.join(GT_SYN_PROCESSED, scene, clip_id)
+    clip_n   = _clip_num(clip_id)
 
-    # Fallback: raw UE5 CSV
-    clip_n = _clip_num(clip_id)
-    csv_path = os.path.join(GT_SYN_RAW, scene, "cameras", f"camera_full{clip_n}.csv")
+    # Fast path: pre-processed poses.npy
+    for proc_path in (os.path.join(clip_dir, str(clip_n), "poses.npy"),
+                      os.path.join(clip_dir, "poses.npy")):
+        if os.path.exists(proc_path):
+            poses = np.load(proc_path).astype(np.float64)
+            return _resample(poses, n_gen)
+
+    # Fallback: the clip's raw UE5 CSV
+    csv_path = os.path.join(clip_dir, f"camera_full{clip_n}.csv")
     if not os.path.exists(csv_path):
         return None
     poses = _csv_to_c2w(csv_path)
@@ -84,11 +102,11 @@ def load_gt_poses_synthetic(scene: str, clip_id: str, n_gen: int) -> np.ndarray 
 
 def load_gt_poses_real(clip_id: str, n_gen: int) -> np.ndarray | None:
     """
-    Load mega-sam cam_c2w for a real clip, resampled to n_gen frames.
+    Load MapAnything cam_c2w for a real clip, resampled to n_gen frames.
     Returns (n_gen, 4, 4) float64 or None.
     """
-    npz_path = os.path.join(GT_REAL_POSES, f"{clip_id}_mapanything.npz")
-    if not os.path.exists(npz_path):
+    npz_path = _real_npz_path(clip_id)
+    if npz_path is None:
         return None
     data  = np.load(npz_path)
     poses = data["cam_c2w"].astype(np.float64)
@@ -97,20 +115,22 @@ def load_gt_poses_real(clip_id: str, n_gen: int) -> np.ndarray | None:
 
 def load_intrinsics_synthetic(scene: str, clip_id: str) -> np.ndarray | None:
     """Load 3×3 intrinsics matrix for a synthetic clip."""
-    path = os.path.join(GT_SYN_PROCESSED, scene, clip_id, "intrinsics.npy")
-    if os.path.exists(path):
-        K = np.load(path).astype(np.float64)
-        if K.ndim == 2 and K.shape[1] == 4:
-            fx, fy, cx, cy = K[0]
-            return np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])
-        if K.ndim == 1 and K.shape[0] == 4:
-            fx, fy, cx, cy = K
-            return np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])
-        return K  # already (3, 3)
-
-    # Fallback: read fx, fy, cx, cy from first row of raw CSV
+    clip_dir = os.path.join(GT_SYN_PROCESSED, scene, clip_id)
     clip_n   = _clip_num(clip_id)
-    csv_path = os.path.join(GT_SYN_RAW, scene, "cameras", f"camera_full{clip_n}.csv")
+    for path in (os.path.join(clip_dir, str(clip_n), "intrinsics.npy"),
+                 os.path.join(clip_dir, "intrinsics.npy")):
+        if os.path.exists(path):
+            K = np.load(path).astype(np.float64)
+            if K.ndim == 2 and K.shape[1] == 4:
+                fx, fy, cx, cy = K[0]
+                return np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])
+            if K.ndim == 1 and K.shape[0] == 4:
+                fx, fy, cx, cy = K
+                return np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])
+            return K  # already (3, 3)
+
+    # Fallback: read fx, fy, cx, cy from first row of the clip's raw CSV
+    csv_path = os.path.join(clip_dir, f"camera_full{clip_n}.csv")
     if not os.path.exists(csv_path):
         return None
     df = pd.read_csv(csv_path, nrows=1)
@@ -121,9 +141,9 @@ def load_intrinsics_synthetic(scene: str, clip_id: str) -> np.ndarray | None:
 
 
 def load_intrinsics_real(clip_id: str) -> np.ndarray | None:
-    """Load 3×3 intrinsics matrix from mega-sam output for a real clip."""
-    npz_path = os.path.join(GT_REAL_POSES, f"{clip_id}_mapanything.npz")
-    if not os.path.exists(npz_path):
+    """Load 3×3 intrinsics matrix from the MapAnything npz for a real clip."""
+    npz_path = _real_npz_path(clip_id)
+    if npz_path is None:
         return None
     data = np.load(npz_path)
     return data["intrinsic"].astype(np.float64)

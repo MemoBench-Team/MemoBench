@@ -9,6 +9,7 @@ The benchmark includes **360 clips** (196 synthetic + 164 real-world) spanning d
 
 - [Installation](#installation)
 - [Data Preparation](#data-preparation)
+- [Inference Protocol](#inference-protocol)
 - [Output Directory Structure](#output-directory-structure)
 - [Running Evaluation](#running-evaluation)
   - [Step 1: Automated Metrics](#step-1-automated-metrics)
@@ -71,10 +72,13 @@ MemoBench/
 ├── data/
 │   ├── Synthetic_processed/                # Synthetic GT data (196 clips)
 │   │   ├── Barnyard/
-│   │   │   ├── Barnyard_001/
-│   │   │   │   ├── image.jpg               # Reference start frame
-│   │   │   │   ├── intrinsics.npy          # (N_gt, 4) [fx, fy, cx, cy]
-│   │   │   │   └── poses.npy              # (N_gt, 4, 4) cam extrinsics (c2w)
+│   │   │   ├── Barnyard_001/               # (digit suffix below = clip number, e.g. RGB5/ for _005)
+│   │   │   │   ├── RGB1/                   # GT RGB frames; first frame = reference start frame
+│   │   │   │   ├── Depth1/                 # GT metric depth maps
+│   │   │   │   ├── 1/
+│   │   │   │   │   ├── intrinsics.npy      # (N_gt, 4) [fx, fy, cx, cy]
+│   │   │   │   │   └── poses.npy           # (N_gt, 4, 4) cam extrinsics (c2w)
+│   │   │   │   └── camera_full1.csv        # raw UE5 camera track
 │   │   │   ├── Barnyard_002/
 │   │   │   └── ...
 │   │   ├── CityPark/
@@ -90,19 +94,20 @@ MemoBench/
 │   │
 │   ├── Real_Raw/                           # Real-world GT data (164 clips)
 │   │   ├── 001/
-│   │   │   ├── 001.mp4                     # GT video
-│   │   │   ├── 001-intrinsics.json         # {"camera": {fx, fy, cx, cy, ...}}
-│   │   │   └── timestamps.txt             # One timestamp per GT frame
+│   │   │   ├── 001.mp4                     # GT video (also defines the GT frame count)
+│   │   │   ├── FRAMES/                     # extracted GT frames (frame_0001.jpg, ...)
+│   │   │   ├── depth/                      # per-frame depth maps
+│   │   │   ├── raw/
+│   │   │   │   └── 001_mapanything.npz     # MapAnything GT camera: cam_c2w + intrinsic
+│   │   │   └── thresholded/
+│   │   │       └── 001_mapanything.npz     # alternative estimate (not used by eval)
 │   │   ├── 002/
 │   │   ├── ...
 │   │   └── Real_ExitReenter.xlsx           # V-D-R phase boundaries (real)
-│   ├── mapanything/                        # Pre-estimated GT camera poses
-│   │   └── outputs/
-│   │       └── real/                       # {clip_id}_mapanything.npz per real clip
 │   │
-│   ├── sam3_metadata/                      # Object metadata for ORS
-│   │   ├── synthetic_metadata.csv          # scene, video_id, subject, prompt
-│   │   └── real_metadata.csv              # video_id, subject, prompt
+│   ├── sam3_metadata/                      # Per-clip prompts, first-frame paths, ORS subjects
+│   │   ├── synthetic_metadata.csv          # scene, video_id, subject, exr_path (first-frame path), prompt
+│   │   └── real_metadata.csv               # video_id, subject, full_image_path (first-frame path), prompt
 │   │
 │   └── vqa_questions/                      # Pre-generated & filtered VQA
 │       ├── Barnyard-1-questions.csv        # Per-clip question sets (45 files)
@@ -112,11 +117,37 @@ MemoBench/
 ```
 
 **Key files explained:**
-- `Synthetic_ExitReenter.xlsx` (under `Synthetic_processed/`) / `Real_ExitReenter.xlsx` (under `Real_Raw/`): Define the V-D-R phase boundaries per clip — the frame where the object leaves the FOV and the frame where it returns. The two files use different column names: the synthetic sheet uses `exits` / `re-enter`, the real sheet uses `exit` / `reenter`. These are in GT frame space and are automatically scaled to match the generated video's frame count.
-- `poses.npy` (synthetic) / `mapanything/outputs/real/` (real): GT camera poses. Synthetic poses come from the UE5 renderer. Real-world GT poses are pre-estimated using MapAnything and provided with the dataset — you do not need to run MapAnything on GT videos yourself.
-- `sam3_metadata/*.csv`: Contains the text description of the target object per clip (e.g., "fox", "person in silver suit"), used as the SAM-3 text prompt for ORS.
+- `Synthetic_ExitReenter.xlsx` (under `Synthetic_processed/`) / `Real_ExitReenter.xlsx` (under `Real_Raw/`): Define the V-D-R phase boundaries per clip — the frame where the object leaves the FOV and the frame where it returns. The two files use different column names: the synthetic sheet uses `exits` / `re-enter`, the real sheet uses `exit` / `reenter`. These are in GT frame space and are automatically scaled to match the generated video's frame count. **These sheets are used at evaluation time only** — they are not model inputs. Note that `Real_ExitReenter.xlsx` has no `prompt` column: the per-clip generation inputs for the Real split (text prompt + reference first frame) live in `data/sam3_metadata/real_metadata.csv` (see [Inference Protocol](#inference-protocol)).
+- `{n}/poses.npy` (synthetic) / `Real_Raw/{id}/raw/{id}_mapanything.npz` (real): GT camera poses. Synthetic poses come from the UE5 renderer (with the raw camera track in `camera_full{n}.csv`). Real-world GT poses and intrinsics are pre-estimated using MapAnything and shipped per clip in the `raw/` subfolder — you do not need to run MapAnything on GT videos yourself.
+- `sam3_metadata/*.csv`: Per-clip metadata serving two roles. (1) **Generation inputs**: the `prompt` column holds the full text prompt for each clip, and the reference first frame is given by `exr_path` (synthetic — historical column name, the path points to the first `RGB{n}/` JPG) / `full_image_path` (real) — see [Inference Protocol](#inference-protocol). (2) **Evaluation**: the `subject` column (e.g., "fox", "person in silver suit") is used as the SAM-3 text prompt for ORS.
 - `vqa_questions/*-questions.csv`: Pre-generated and filtered Yes/No question banks (6 per dimension × 4 dimensions).
 - `vqa_questions/failure-cases.csv`: The clip list the VQA step iterates (columns: `scene`, `video_id`, `hint`, `folder`, `Finished`, `prompt`). `folder` is the generated-frames directory name for each clip; `llm-vqa.py` reads this file by default via `--cases-csv`.
+
+---
+
+## Inference Protocol
+
+How to generate videos for MemoBench with your own model. The rule: **every model is conditioned on the same first frame + text prompt; models that support camera conditioning additionally receive the GT trajectory.** Keeping these inputs identical across models is what makes results comparable.
+
+**Per-clip generation inputs:**
+
+| Split | Text prompt | Reference first frame | Camera (optional) |
+|-------|-------------|----------------------|-------------------|
+| Synthetic | `prompt` in `data/sam3_metadata/synthetic_metadata.csv` (same text as `Synthetic_ExitReenter.xlsx`) | `exr_path` in the same CSV (points to the first `RGB{n}/` JPG) | `intrinsics.npy` + `poses.npy` (`(N,4,4)` c2w) per clip |
+| Real | `prompt` in `data/sam3_metadata/real_metadata.csv` | `full_image_path` in the same CSV | `Real_Raw/{id}/raw/{id}_mapanything.npz` (`cam_c2w` + `intrinsic`) |
+
+**By model interface:**
+
+- **CI2V (camera-controllable image-to-video)**: first frame + prompt + GT camera trajectory.
+- **Explicit-3D view synthesis**: first frame + explicit GT camera poses.
+- **I2V / TI2V (no camera support)**: first frame + prompt only. Do not feed camera information. Such models are still scored on Camera Controllability and Instruction Following (and will score low there) — that is expected and reported as-is.
+
+Notes:
+
+- The V-D-R phase boundaries (`*_ExitReenter.xlsx`) are **evaluation-time only** and are automatically rescaled to your generated video's frame count — you do not need to align frames to them during generation.
+- The GT camera poses serve double duty: a generation input for camera-conditioned models, and the reference for the Camera Controllability metric (poses are re-estimated from your generated video with MapAnything and compared against GT) for all models.
+
+After generation, arrange your frames as described in [Output Directory Structure](#output-directory-structure) and run the three-step evaluation below.
 
 ---
 

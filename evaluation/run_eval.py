@@ -14,9 +14,8 @@ logging.disable(logging.INFO)   # suppress per-clip tokenizer spam from open_cli
 from automated.io.frames import FrameReader, VideoReader
 from automated.io.metadata import (
     load_intrinsics,
+    load_intrinsics_npz,
     load_gt_frame_count_synthetic,
-    load_intrinsics_json,
-    load_gt_frame_count_real,
     extract_gt_frame_at,
     extract_gt_frames_batch,
 )
@@ -39,7 +38,6 @@ from automated.metrics.clip_metrics import clip_frame_similarity
 GT_ROOT_SYNTHETIC  = "data/Synthetic_processed"
 GEN_ROOT_SYNTHETIC = "output/Synthetic"                      # default; override with --gen_root
 KEYFRAMES_SYN_XLS  = "data/Synthetic_processed/Synthetic_ExitReenter.xlsx"
-GT_VIDEOS_SYNTHETIC = "data/Synthetic_videos"                # original UE5 MP4s
 
 GT_ROOT_REAL       = "data/Real_Raw"
 GEN_ROOT_REAL      = "output/Real"                           # default; override with --gen_root
@@ -47,22 +45,10 @@ KEYFRAMES_REAL_XLS = "data/Real_Raw/Real_ExitReenter.xlsx"
 REAL_SELECTED_XLS  = "data/Real_Selected.xls"                # Availability filter
 
 
-def _synthetic_gt_video_path(video_folder: str) -> str:
-    """
-    Map a synthetic clip id (e.g. 'CityPark_005', 'Middle_Age_008') to its
-    UE5 GT video path (e.g. '.../CityPark5.mp4', '.../MiddleAge8.mp4').
-
-    Convention: remove all underscores from the scene name, strip leading zeros
-    from the clip number.  e.g. Japanese_Street_003 → JapaneseStreet3.mp4
-    """
-    import re
-    m = re.match(r'^(.+)_(\d+)$', video_folder)
-    if not m:
-        return ""
-    scene_raw = m.group(1)           # e.g. "Middle_Age"
-    num       = str(int(m.group(2))) # strip leading zeros: "005" → "5"
-    scene     = scene_raw.replace("_", "")  # "MiddleAge"
-    return os.path.join(GT_VIDEOS_SYNTHETIC, f"{scene}{num}.mp4")
+def _clip_num(clip_name: str) -> str:
+    """'CityPark_005' -> '5' (unpadded clip number, matches RGB5/Depth5/5/)."""
+    m = re.match(r'^.+_(\d+)$', clip_name)
+    return str(int(m.group(1))) if m else ""
 
 OUT_DIR = "outputs"
 
@@ -329,14 +315,21 @@ def _add_synthetic_clip(clips: list, clip_name: str, scene: str,
     """
     if clip_name not in kf_map:
         return
-    gt_dir        = os.path.join(GT_ROOT_SYNTHETIC, scene, clip_name)
-    gt_image_path = os.path.join(gt_dir, "image.jpg")
-    gt_intr_path  = os.path.join(gt_dir, "intrinsics.npy")
-    if not (os.path.exists(gt_image_path) and os.path.exists(gt_intr_path)):
+    gt_dir       = os.path.join(GT_ROOT_SYNTHETIC, scene, clip_name)
+    clip_n       = _clip_num(clip_name)
+    gt_rgb_dir   = os.path.join(gt_dir, f"RGB{clip_n}")           # GT frames
+    gt_intr_path = os.path.join(gt_dir, clip_n, "intrinsics.npy")
+    if not (os.path.isdir(gt_rgb_dir) and os.path.exists(gt_intr_path)):
+        print(f"[WARN] skipping synthetic clip {clip_name}: "
+              f"missing {gt_rgb_dir} or {gt_intr_path}")
         return
-    gt_video_path = _synthetic_gt_video_path(clip_name)
-    if not os.path.exists(gt_video_path):
+    rgb_frames = sorted(f for f in os.listdir(gt_rgb_dir)
+                        if f.lower().endswith((".jpg", ".jpeg", ".png")))
+    if not rgb_frames:
+        print(f"[WARN] skipping synthetic clip {clip_name}: {gt_rgb_dir} is empty")
         return
+    gt_image_path = os.path.join(gt_rgb_dir, rgb_frames[0])       # reference start frame
+    gt_video_path = gt_rgb_dir                                    # GT source = frames dir
     kf = kf_map[clip_name]
     if prompt_map is not None:
         prompt = prompt_map.get(clip_name, kf.get("prompt", ""))
@@ -442,11 +435,12 @@ def discover_clips_real(gen_root: str = GEN_ROOT_REAL,
     clips      = []
 
     def _add_real_clip(clip_id, frames_dir=None, video_path=None):
-        gt_dir        = os.path.join(GT_ROOT_REAL, clip_id)
-        gt_mp4        = os.path.join(gt_dir, f"{clip_id}.mp4")
-        gt_intr_json  = os.path.join(gt_dir, f"{clip_id}-intrinsics.json")
-        gt_timestamps = os.path.join(gt_dir, "timestamps.txt")
-        if not all(os.path.exists(p) for p in [gt_mp4, gt_intr_json, gt_timestamps]):
+        gt_dir  = os.path.join(GT_ROOT_REAL, clip_id)
+        gt_mp4  = os.path.join(gt_dir, f"{clip_id}.mp4")
+        gt_npz  = os.path.join(gt_dir, "raw", f"{clip_id}_mapanything.npz")
+        if not (os.path.exists(gt_mp4) and os.path.exists(gt_npz)):
+            print(f"[WARN] skipping real clip {clip_id}: "
+                  f"missing {gt_mp4 if not os.path.exists(gt_mp4) else gt_npz}")
             return
         if clip_id not in kf_map:
             return
@@ -454,17 +448,16 @@ def discover_clips_real(gen_root: str = GEN_ROOT_REAL,
             return
         kf = kf_map[clip_id]
         clips.append({
-            "id":                 clip_id,
-            "scene":              "real",
-            "data_type":          "real",
-            "frames_dir":         frames_dir,
-            "video_path":         video_path,
-            "gt_mp4":             gt_mp4,
-            "gt_intrinsics_json": gt_intr_json,
-            "gt_timestamps":      gt_timestamps,
-            "h_start_gt":         kf["h_start"],
-            "r_start_gt":         kf["r_start"],
-            "prompt":             prompt_map.get(clip_id, ""),
+            "id":                clip_id,
+            "scene":             "real",
+            "data_type":         "real",
+            "frames_dir":        frames_dir,
+            "video_path":        video_path,
+            "gt_mp4":            gt_mp4,
+            "gt_intrinsics_npz": gt_npz,
+            "h_start_gt":        kf["h_start"],
+            "r_start_gt":        kf["r_start"],
+            "prompt":            prompt_map.get(clip_id, ""),
         })
 
     for entry in sorted(os.listdir(gen_root)):
@@ -622,10 +615,10 @@ def _eval_clip(clip: dict, max_side: int, sample_step: int, device: str,
     # --- Intrinsics and GT frame count ---
     if data_type == "synthetic":
         intrinsics = load_intrinsics(clip["gt_intrinsics"])
-        gt_total   = load_gt_frame_count_synthetic(clip["gt_video"])
+        gt_total   = load_gt_frame_count_synthetic(clip["gt_video"])   # RGB{n}/ frames dir
     else:  # real
-        intrinsics = load_intrinsics_json(clip["gt_intrinsics_json"])
-        gt_total   = load_gt_frame_count_real(clip["gt_timestamps"])
+        intrinsics = load_intrinsics_npz(clip["gt_intrinsics_npz"])    # raw/{id}_mapanything.npz
+        gt_total   = load_gt_frame_count_synthetic(clip["gt_mp4"])     # frame count from GT mp4
 
     # --- Generated frames ---
     gen = _make_reader(clip, max_side=max_side)

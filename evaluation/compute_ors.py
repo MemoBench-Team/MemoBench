@@ -109,17 +109,31 @@ def map_keyframes(h_gt, r_gt, gt_total, gen_total):
 
 
 def gt_frame_count_synthetic(scene, clip_name):
-    intr_path = os.path.join(GT_SYNTHETIC, scene, clip_name, "intrinsics.npy")
-    if os.path.exists(intr_path):
-        return np.load(intr_path).shape[0]
+    clip_dir = os.path.join(GT_SYNTHETIC, scene, clip_name)
+    clip_n   = str(int(clip_name.rsplit("_", 1)[1]))
+    # released layout: {clip}/{n}/intrinsics.npy (one row per GT frame)
+    for intr_path in (os.path.join(clip_dir, clip_n, "intrinsics.npy"),
+                      os.path.join(clip_dir, "intrinsics.npy")):
+        if os.path.exists(intr_path):
+            return np.load(intr_path).shape[0]
+    # fallback: count GT RGB frames
+    rgb_dir = os.path.join(clip_dir, f"RGB{clip_n}")
+    if os.path.isdir(rgb_dir):
+        n = sum(1 for f in os.listdir(rgb_dir)
+                if f.lower().endswith((".jpg", ".jpeg", ".png")))
+        if n > 0:
+            return n
     return None
 
 
 def gt_frame_count_real(clip_id):
-    ts_path = os.path.join(GT_REAL, clip_id, "timestamps.txt")
-    if os.path.exists(ts_path):
-        with open(ts_path) as f:
-            return sum(1 for line in f if line.strip())
+    # released layout: count extracted GT frames in FRAMES/
+    frames_dir = os.path.join(GT_REAL, clip_id, "FRAMES")
+    if os.path.isdir(frames_dir):
+        n = sum(1 for f in os.listdir(frames_dir)
+                if f.lower().endswith((".jpg", ".jpeg", ".png")))
+        if n > 0:
+            return n
     return None
 
 
