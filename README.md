@@ -62,6 +62,37 @@ conda activate memobench
 python -c "import torch; import open_clip; import lpips; print('OK')"
 ```
 
+### Troubleshooting (ImageReward on newer Python / setuptools / transformers)
+
+On recent environments (Python ≥ 3.12, setuptools ≥ 70, transformers ≥ 4.5x) the
+ImageReward metric can fail to load due to two upstream packages that haven't kept
+up. Both are one-line fixes inside your site-packages:
+
+1. **`clip` package** — `ImportError: cannot import name 'packaging' from 'pkg_resources'`:
+
+```bash
+SITE=$(python -c "import clip, os; print(os.path.dirname(clip.__file__))")
+sed -i 's/from pkg_resources import packaging/import packaging.version\nimport packaging/' $SITE/clip.py
+```
+
+2. **ImageReward's bundled BLIP** — `ImportError: cannot import name 'apply_chunking_to_forward' from 'transformers.modeling_utils'` (these utils moved to `transformers.pytorch_utils`):
+
+```bash
+SITE=$(python -c "import ImageReward, os; print(os.path.dirname(ImageReward.__file__))")
+python - "$SITE/models/BLIP/med.py" <<'EOF'
+import sys
+f = sys.argv[1]; s = open(f).read()
+s = s.replace(
+    "from transformers.modeling_utils import (\n    PreTrainedModel,\n    apply_chunking_to_forward,\n    find_pruneable_heads_and_indices,\n    prune_linear_layer,\n)",
+    "from transformers.modeling_utils import PreTrainedModel\nfrom transformers.pytorch_utils import (\n    apply_chunking_to_forward,\n    find_pruneable_heads_and_indices,\n    prune_linear_layer,\n)")
+open(f, "w").write(s)
+print("patched", f)
+EOF
+```
+
+If ImageReward is unavailable, `run_eval.py` still runs — the `ImageRewardScore`
+column is simply left empty (a warning is printed).
+
 ---
 
 ## Data Preparation
