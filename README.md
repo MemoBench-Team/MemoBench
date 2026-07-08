@@ -18,6 +18,7 @@ The benchmark includes **360 clips** (196 synthetic + 164 real-world) spanning d
 - [Leaderboard](#leaderboard)
 - [Metrics Reference](docs/metrics-reference.md)
 - [License](#license)
+- [Citation](#citation)
 
 ---
 
@@ -364,4 +365,19 @@ For detailed descriptions of all 14 metrics (backbones, phases, score ranges), s
 ## License
 
 This project is licensed under the MIT License. See [LICENSE.md](LICENSE.md) for details.
+
+---
+
+## Citation
+
+If you find MemoBench useful in your research, please cite:
+
+```bibtex
+@article{chen2026memobench,
+  title={MemoBench: Benchmarking World Modeling in Dynamically Changing Environments},
+  author={Chen, Haoyu and Zhou, Kaichen and Hua, Hang and Zhang, Kaile and Qian, Jingwen and Ma, Wufei and Chen, Haonan and Liu, Chunjiang and Zhao, Yizhou and Wang, Xiaoyuan and others},
+  journal={arXiv preprint arXiv:2606.27537},
+  year={2026}
+}
+```
 
