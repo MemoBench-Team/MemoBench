@@ -60,3 +60,7 @@ third_party/
 # Logs
 *.log
 wandb/
+
+# Local eval caches (model weights)
+.hf_cache/
+.torch_cache/

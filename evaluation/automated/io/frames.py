@@ -13,15 +13,16 @@ def _resize_max_side(img: np.ndarray, max_side: int) -> np.ndarray:
 
 
 class FrameReader:
-    """Reads a directory of zero-padded PNG frames (e.g. 00000.png, 00001.png, ...)."""
+    """Reads a directory of zero-padded image frames (e.g. 00000.png / frame_0001.jpg)."""
 
     def __init__(self, frames_dir: str, max_side: int = 640):
         self.frames_dir = frames_dir
         self.max_side = max_side
 
-        files = sorted(f for f in os.listdir(frames_dir) if f.lower().endswith(".png"))
+        files = sorted(f for f in os.listdir(frames_dir)
+                       if f.lower().endswith((".png", ".jpg", ".jpeg")))
         if not files:
-            raise FileNotFoundError(f"No PNG frames found in {frames_dir}")
+            raise FileNotFoundError(f"No image frames found in {frames_dir}")
         self._files = files
         self._n = len(files)
 

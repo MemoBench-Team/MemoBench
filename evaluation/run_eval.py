@@ -286,22 +286,26 @@ def _make_reader(clip: dict, max_side: int):
     raise ValueError(f"Clip {clip['id']} has neither frames_dir nor video_path")
 
 
+_FRAME_EXTS = (".png", ".jpg", ".jpeg")
+
+
 def _find_frames_dir(clip_path: str):
-    """Return the PNG frames directory for a clip, or None if none found.
+    """Return the image frames directory for a clip, or None if none found.
 
     Tries {clip_path}/frames/ first (standard layout),
     then {clip_path}/samples-rgb/ (Stable-Virtual-Camera layout),
-    then {clip_path} itself (PNG-direct layout used by OpenSora).
+    then {clip_path} itself (image-direct layout used by OpenSora).
+    Accepts PNG and JPG frames.
     """
     frames_subdir = os.path.join(clip_path, "frames")
     if os.path.isdir(frames_subdir):
-        if any(f.endswith(".png") for f in os.listdir(frames_subdir)):
+        if any(f.lower().endswith(_FRAME_EXTS) for f in os.listdir(frames_subdir)):
             return frames_subdir
     samples_subdir = os.path.join(clip_path, "samples-rgb")
     if os.path.isdir(samples_subdir):
-        if any(f.endswith(".png") for f in os.listdir(samples_subdir)):
+        if any(f.lower().endswith(_FRAME_EXTS) for f in os.listdir(samples_subdir)):
             return samples_subdir
-    if any(f.endswith(".png") for f in os.listdir(clip_path)):
+    if any(f.lower().endswith(_FRAME_EXTS) for f in os.listdir(clip_path)):
         return clip_path
     return None
 
