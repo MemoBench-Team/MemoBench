@@ -379,7 +379,7 @@ The leaderboard script automatically:
 
 **Join the leaderboard:**
 
-:trophy: Check out our [Leaderboard on Huggingface](https://huggingface.co/spaces/cavenqjw/MemoBench_Leaderboard) for the latest rankings and numerical results!
+:trophy: Check out our [Leaderboard on Huggingface](https://huggingface.co/spaces/tonyc54/MemoBench_Leaderboard) for the latest rankings and numerical results!
 
 How to join the leaderboard:
 - **Submit Results (Highly Recommended):** Follow the evaluation instructions above to generate your `leaderboard.csv` file. Email it to tonychen54816@gmail.com, and the MemoBench Team will update the leaderboard.
